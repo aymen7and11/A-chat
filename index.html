@@ -1,0 +1,870 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#070912" />
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<title>A-chat — a quiet room for friends</title>
+<meta name="description" content="A private liquid-glass chat room. Calm, elegant, alive." />
+
+<!--
+  =====================================================================
+  A-CHAT  ·  single-file production build
+  =====================================================================
+  One HTML file. Vanilla HTML + CSS + JS. No frameworks, no build tools.
+
+  HOW TO CONNECT FIREBASE (you do this yourself):
+    1. In <head> below, uncomment the two <script> tags for the Firebase
+       compatibility SDK (app + database).
+    2. Scroll to the JS section titled "FIREBASE HOOKS" and paste your
+       firebaseConfig object into the marked constant.
+    3. Messages are written to /messages and listened to with child_added.
+       Usernames are stored in localStorage under the key "achat:name:v1".
+    4. That's it — the UI auto-switches from the in-memory demo to live
+       Firebase the moment a valid config is detected.
+  =====================================================================
+-->
+
+<!-- ===== FIREBASE SDK (uncomment to enable) =====
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+================================================ -->
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+
+<style>
+/* =====================================================================
+   1. DESIGN TOKENS
+   ---------------------------------------------------------------------
+   Centralised CSS variables. Tweak these to re-skin the whole app.
+   ===================================================================== */
+:root{
+  --bg-0:#05060c;
+  --bg-1:#0b0d1a;
+  --ink:#f4f3ff;
+  --ink-soft:rgba(244,243,255,.72);
+  --ink-mute:rgba(244,243,255,.45);
+  --line:rgba(255,255,255,.10);
+  --line-strong:rgba(255,255,255,.18);
+
+  --glass:rgba(255,255,255,.06);
+  --glass-strong:rgba(255,255,255,.10);
+  --glass-hi:rgba(255,255,255,.22);
+
+  --accent-a:#7aa2ff;   /* cool periwinkle */
+  --accent-b:#c89bff;   /* soft lavender   */
+  --accent-c:#ffb4d8;   /* warm rose       */
+  --accent-d:#7df0d1;   /* mint highlight  */
+
+  --radius-lg:28px;
+  --radius-md:20px;
+  --radius-sm:14px;
+
+  --shadow-soft: 0 30px 80px -30px rgba(0,0,0,.65), 0 2px 0 rgba(255,255,255,.04) inset;
+  --shadow-deep: 0 50px 120px -40px rgba(0,0,0,.8), 0 1px 0 rgba(255,255,255,.06) inset;
+
+  --spring: cubic-bezier(.2,.9,.2,1.15);   /* slight overshoot */
+  --ease:   cubic-bezier(.22,.61,.36,1);   /* natural ease     */
+}
+
+/* =====================================================================
+   2. RESET + BASE
+   ===================================================================== */
+*,*::before,*::after{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;
+  font-family:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif;
+  font-weight:400;
+  color:var(--ink);
+  background:var(--bg-0);
+  overflow:hidden;
+  -webkit-font-smoothing:antialiased;
+  text-rendering:optimizeLegibility;
+  letter-spacing:-.005em;
+}
+button,input,textarea{font:inherit;color:inherit}
+button{border:0;background:none;cursor:pointer}
+::selection{background:rgba(122,162,255,.35);color:#fff}
+
+/* Beautiful custom scrollbar */
+.scroll::-webkit-scrollbar{width:10px;height:10px}
+.scroll::-webkit-scrollbar-track{background:transparent}
+.scroll::-webkit-scrollbar-thumb{
+  background:linear-gradient(180deg,rgba(255,255,255,.18),rgba(255,255,255,.06));
+  border-radius:999px;border:2px solid transparent;background-clip:padding-box;
+}
+.scroll::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.28);background-clip:padding-box;border:2px solid transparent}
+
+/* =====================================================================
+   3. AURORA BACKGROUND
+   ---------------------------------------------------------------------
+   Three large blurred orbs slowly drift behind everything to create the
+   "liquid" atmosphere. Pure CSS — no JS cost.
+   ===================================================================== */
+.stage{
+  position:fixed;inset:0;overflow:hidden;
+  background:
+    radial-gradient(1200px 800px at 80% -10%, rgba(122,162,255,.18), transparent 60%),
+    radial-gradient(900px 700px at 0% 100%, rgba(200,155,255,.16), transparent 60%),
+    radial-gradient(700px 600px at 60% 110%, rgba(255,180,216,.10), transparent 60%),
+    linear-gradient(180deg,#06070f 0%, #090b18 50%, #05060c 100%);
+}
+.orb{position:absolute;border-radius:50%;filter:blur(80px);opacity:.55;mix-blend-mode:screen;will-change:transform}
+.orb.a{width:46vmax;height:46vmax;left:-10vmax;top:-12vmax;background:radial-gradient(circle,#5a78ff 0%,transparent 60%);animation:drift1 28s var(--ease) infinite alternate}
+.orb.b{width:38vmax;height:38vmax;right:-8vmax;top:20vmax;background:radial-gradient(circle,#c47bff 0%,transparent 60%);animation:drift2 34s var(--ease) infinite alternate}
+.orb.c{width:42vmax;height:42vmax;left:20vmax;bottom:-14vmax;background:radial-gradient(circle,#ff8fc1 0%,transparent 60%);animation:drift3 40s var(--ease) infinite alternate}
+@keyframes drift1{to{transform:translate3d(8vmax,6vmax,0) rotate(20deg)}}
+@keyframes drift2{to{transform:translate3d(-6vmax,4vmax,0) rotate(-15deg)}}
+@keyframes drift3{to{transform:translate3d(4vmax,-6vmax,0) rotate(10deg)}}
+
+/* Subtle floating particles */
+.dust{position:absolute;inset:0;pointer-events:none}
+.dust i{
+  position:absolute;width:3px;height:3px;border-radius:50%;
+  background:radial-gradient(circle,#fff 0%,transparent 70%);opacity:.5;
+  animation:rise linear infinite;
+}
+@keyframes rise{
+  from{transform:translate3d(0,110vh,0) scale(.6);opacity:0}
+  10%{opacity:.6}
+  90%{opacity:.4}
+  to{transform:translate3d(0,-10vh,0) scale(1);opacity:0}
+}
+
+/* Grain (extremely faint) */
+.grain{
+  position:fixed;inset:0;pointer-events:none;opacity:.04;mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/></filter><rect width='100%' height='100%' filter='url(%23n)' opacity='0.6'/></svg>");
+}
+
+/* =====================================================================
+   4. GLASS PRIMITIVE
+   ---------------------------------------------------------------------
+   Every floating surface uses .glass. Mouse-tracked highlight via
+   custom properties --mx / --my updated by JS.
+   ===================================================================== */
+.glass{
+  position:relative;
+  background:linear-gradient(180deg, rgba(255,255,255,.10), rgba(255,255,255,.04));
+  border:1px solid var(--line-strong);
+  border-radius:var(--radius-lg);
+  backdrop-filter: blur(28px) saturate(160%);
+  -webkit-backdrop-filter: blur(28px) saturate(160%);
+  box-shadow: var(--shadow-soft);
+  overflow:hidden;
+  isolation:isolate;
+}
+.glass::before{
+  /* moving spec highlight */
+  content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+  background:radial-gradient(420px circle at var(--mx,30%) var(--my,0%), rgba(255,255,255,.22), transparent 45%);
+  opacity:.9;transition:opacity .6s var(--ease);
+  mix-blend-mode:screen;
+}
+.glass::after{
+  /* inner edge gleam */
+  content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.18), transparent 30%),
+    linear-gradient(0deg, rgba(255,255,255,.06), transparent 40%);
+  mix-blend-mode:overlay;opacity:.7;
+}
+
+/* =====================================================================
+   5. APP LAYOUT
+   ===================================================================== */
+.app{
+  position:relative;z-index:2;
+  height:100dvh;
+  display:grid;
+  grid-template-rows:auto 1fr auto;
+  gap:18px;
+  padding:18px clamp(14px,3vw,32px) calc(18px + env(safe-area-inset-bottom));
+}
+
+/* -------- 5a. TOP BAR ---------------------------------------------- */
+.topbar{
+  display:flex;align-items:center;justify-content:space-between;gap:16px;
+  padding:14px 18px;border-radius:var(--radius-lg);
+  animation:floatIn .9s var(--spring) both;
+}
+.brand{display:flex;align-items:center;gap:12px;min-width:0}
+.brand .mark{
+  width:38px;height:38px;border-radius:12px;
+  background:
+    radial-gradient(circle at 30% 30%, #fff 0%, transparent 35%),
+    conic-gradient(from 200deg, var(--accent-a), var(--accent-b), var(--accent-c), var(--accent-d), var(--accent-a));
+  box-shadow:0 6px 20px -6px rgba(122,162,255,.7), inset 0 0 0 1px rgba(255,255,255,.25);
+  animation:spin 18s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+.brand h1{
+  margin:0;font-family:"Instrument Serif",serif;font-style:italic;
+  font-size:clamp(20px,2.4vw,28px);font-weight:400;letter-spacing:-.01em;
+}
+.brand .sub{font-size:12px;color:var(--ink-mute);margin-left:2px;display:block;letter-spacing:.02em}
+
+.who{
+  display:flex;align-items:center;gap:10px;
+  padding:8px 14px 8px 8px;border-radius:999px;
+  background:var(--glass);border:1px solid var(--line);
+  transition:transform .35s var(--spring),background .3s var(--ease);
+}
+.who:hover{transform:translateY(-1px);background:var(--glass-strong)}
+.who .avatar{
+  width:30px;height:30px;border-radius:50%;
+  display:grid;place-items:center;font-weight:600;font-size:12px;color:#0b0d1a;
+  background:linear-gradient(135deg,var(--accent-a),var(--accent-c));
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.35);
+}
+.who .name{font-size:13px;color:var(--ink-soft);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.who .edit{font-size:11px;color:var(--ink-mute);padding:4px 8px;border-radius:999px;background:rgba(255,255,255,.04);transition:all .25s var(--ease)}
+.who .edit:hover{background:rgba(255,255,255,.10);color:var(--ink)}
+
+.live{display:flex;align-items:center;gap:8px;color:var(--ink-mute);font-size:12px}
+.live .dot{width:8px;height:8px;border-radius:50%;background:var(--accent-d);box-shadow:0 0 12px var(--accent-d);animation:pulse 2s var(--ease) infinite}
+@keyframes pulse{0%,100%{opacity:.6;transform:scale(.9)}50%{opacity:1;transform:scale(1.1)}}
+
+/* -------- 5b. CHAT STAGE ------------------------------------------- */
+.chat-wrap{
+  position:relative;min-height:0;
+  border-radius:var(--radius-lg);
+  animation:floatIn 1.1s var(--spring) both;
+}
+.chat{
+  position:absolute;inset:0;
+  overflow-y:auto;scroll-behavior:smooth;
+  padding:clamp(20px,4vw,48px) clamp(16px,4vw,56px);
+  display:flex;flex-direction:column;gap:14px;
+  mask-image:linear-gradient(180deg, transparent 0, #000 36px, #000 calc(100% - 36px), transparent 100%);
+}
+.chat-empty{
+  margin:auto;text-align:center;max-width:520px;padding:32px;
+  opacity:0;animation:fadeUp 1.2s var(--spring) .3s forwards;
+}
+.chat-empty h2{
+  font-family:"Instrument Serif",serif;font-style:italic;font-weight:400;
+  font-size:clamp(28px,4vw,44px);margin:0 0 10px;letter-spacing:-.02em;
+  background:linear-gradient(180deg,#fff,rgba(255,255,255,.55));
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+}
+.chat-empty p{color:var(--ink-mute);margin:0;font-size:14px;line-height:1.6}
+
+/* Day separator */
+.day{
+  align-self:center;font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--ink-mute);padding:6px 12px;border-radius:999px;
+  background:rgba(255,255,255,.04);border:1px solid var(--line);
+  backdrop-filter:blur(10px);
+}
+
+/* Message card */
+.msg{
+  --mx:30%;--my:0%;
+  max-width:min(680px, 80%);
+  padding:14px 18px 12px;
+  border-radius:22px;
+  background:linear-gradient(180deg, rgba(255,255,255,.09), rgba(255,255,255,.035));
+  border:1px solid var(--line-strong);
+  backdrop-filter:blur(18px) saturate(160%);
+  -webkit-backdrop-filter:blur(18px) saturate(160%);
+  box-shadow:0 18px 40px -22px rgba(0,0,0,.6);
+  position:relative;isolation:isolate;
+  animation:msgIn .7s var(--spring) both;
+  transition:transform .3s var(--spring), box-shadow .3s var(--ease);
+}
+.msg:hover{transform:translateY(-2px);box-shadow:0 26px 50px -22px rgba(0,0,0,.7)}
+.msg::before{
+  content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+  background:radial-gradient(280px circle at var(--mx) var(--my), rgba(255,255,255,.18), transparent 50%);
+  mix-blend-mode:screen;
+}
+.msg::after{
+  content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+  background:linear-gradient(180deg, rgba(255,255,255,.18), transparent 35%);
+  mix-blend-mode:overlay;opacity:.7;
+}
+.msg .meta{display:flex;align-items:baseline;gap:10px;margin-bottom:4px}
+.msg .meta .u{font-size:12.5px;font-weight:600;color:#fff;letter-spacing:.005em}
+.msg .meta .t{font-size:11px;color:var(--ink-mute)}
+.msg .body{font-size:15.5px;line-height:1.55;color:var(--ink);word-wrap:break-word;white-space:pre-wrap}
+
+/* Mine — gently tinted, right aligned */
+.msg.mine{
+  align-self:flex-end;
+  background:linear-gradient(180deg, rgba(122,162,255,.22), rgba(200,155,255,.10));
+  border-color:rgba(180,200,255,.35);
+}
+.msg.mine .meta .u{
+  background:linear-gradient(90deg,var(--accent-a),var(--accent-c));
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+}
+
+@keyframes msgIn{
+  0%{opacity:0;transform:translateY(14px) scale(.96);filter:blur(6px)}
+  60%{opacity:1;filter:blur(0)}
+  100%{opacity:1;transform:translateY(0) scale(1)}
+}
+@keyframes fadeUp{
+  from{opacity:0;transform:translateY(10px)}
+  to{opacity:1;transform:none}
+}
+@keyframes floatIn{
+  from{opacity:0;transform:translateY(16px) scale(.985);filter:blur(8px)}
+  to{opacity:1;transform:none;filter:none}
+}
+
+/* -------- 5c. COMPOSER --------------------------------------------- */
+.composer{
+  display:flex;align-items:center;gap:10px;
+  padding:10px 10px 10px 18px;border-radius:999px;
+  animation:floatIn 1.2s var(--spring) both;
+}
+.composer .field{
+  flex:1;display:flex;align-items:center;min-width:0;position:relative;
+}
+.composer textarea{
+  flex:1;background:transparent;border:0;outline:0;resize:none;
+  padding:14px 4px;font-size:15.5px;line-height:1.4;color:var(--ink);
+  max-height:140px;min-height:24px;overflow-y:auto;
+}
+.composer textarea::placeholder{color:transparent}
+.composer .ph{
+  position:absolute;left:4px;top:50%;transform:translateY(-50%);
+  color:var(--ink-mute);font-size:15.5px;pointer-events:none;
+  transition:opacity .3s var(--ease), transform .4s var(--spring);
+}
+.composer .ph .caret{display:inline-block;width:1px;height:1em;background:var(--ink-mute);margin-left:1px;vertical-align:-2px;animation:blink 1.1s steps(2) infinite}
+@keyframes blink{50%{opacity:0}}
+.composer.has-text .ph{opacity:0;transform:translate(6px,-50%)}
+
+.send{
+  flex:0 0 auto;position:relative;
+  width:48px;height:48px;border-radius:50%;
+  background:linear-gradient(135deg,var(--accent-a),var(--accent-b) 60%,var(--accent-c));
+  box-shadow:0 12px 30px -10px rgba(122,162,255,.7), inset 0 0 0 1px rgba(255,255,255,.35);
+  display:grid;place-items:center;color:#0b0d1a;
+  transition:transform .25s var(--spring), box-shadow .25s var(--ease), filter .3s var(--ease);
+  filter:saturate(.7) brightness(.85);
+}
+.composer.has-text .send{filter:none}
+.send:hover{transform:translateY(-1px) scale(1.04)}
+.send:active{transform:scale(.92)}
+.send svg{width:20px;height:20px;transition:transform .35s var(--spring)}
+.send:hover svg{transform:translateX(2px) rotate(-8deg)}
+
+/* =====================================================================
+   6. NAME MODAL
+   ===================================================================== */
+.modal{
+  position:fixed;inset:0;z-index:50;display:grid;place-items:center;
+  background:radial-gradient(circle at 50% 40%, rgba(10,12,24,.55), rgba(5,6,12,.85));
+  backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+  opacity:0;pointer-events:none;transition:opacity .5s var(--ease);
+}
+.modal.show{opacity:1;pointer-events:auto}
+.modal .card{
+  width:min(440px,calc(100% - 32px));padding:32px;border-radius:28px;
+  text-align:center;transform:translateY(20px) scale(.96);opacity:0;
+  transition:transform .7s var(--spring),opacity .5s var(--ease);
+}
+.modal.show .card{transform:none;opacity:1}
+.modal h2{
+  font-family:"Instrument Serif",serif;font-style:italic;font-weight:400;
+  font-size:34px;margin:6px 0 6px;letter-spacing:-.02em;
+}
+.modal p{color:var(--ink-mute);margin:0 0 22px;font-size:14px}
+.modal .input{
+  display:flex;align-items:center;gap:8px;padding:6px 6px 6px 18px;
+  border-radius:999px;background:rgba(255,255,255,.06);
+  border:1px solid var(--line-strong);
+  transition:transform .35s var(--spring),border-color .25s var(--ease),box-shadow .3s var(--ease);
+}
+.modal .input:focus-within{
+  transform:scale(1.015);border-color:rgba(180,200,255,.55);
+  box-shadow:0 0 0 6px rgba(122,162,255,.12);
+}
+.modal input{
+  flex:1;background:transparent;border:0;outline:0;padding:12px 0;font-size:16px;color:var(--ink);
+}
+.modal input::placeholder{color:var(--ink-mute)}
+.modal .go{
+  height:42px;padding:0 18px;border-radius:999px;font-weight:600;font-size:14px;color:#0b0d1a;
+  background:linear-gradient(135deg,var(--accent-a),var(--accent-c));
+  box-shadow:0 10px 24px -10px rgba(122,162,255,.7), inset 0 0 0 1px rgba(255,255,255,.4);
+  transition:transform .25s var(--spring), filter .25s var(--ease);
+}
+.modal .go:hover{transform:translateY(-1px)}
+.modal .go:active{transform:scale(.95)}
+.modal .hint{margin-top:14px;font-size:11.5px;color:var(--ink-mute)}
+
+/* =====================================================================
+   7. RESPONSIVE
+   ===================================================================== */
+@media (max-width:640px){
+  .app{padding:12px 12px calc(12px + env(safe-area-inset-bottom));gap:12px}
+  .topbar{padding:10px 12px}
+  .brand .sub{display:none}
+  .who .name{max-width:90px}
+  .live{display:none}
+  .chat{padding:18px 12px}
+  .msg{max-width:88%;padding:12px 14px 10px;border-radius:18px}
+  .msg .body{font-size:15px}
+  .composer{padding:8px 8px 8px 14px}
+  .composer textarea{font-size:16px} /* avoid iOS zoom */
+  .composer .ph{font-size:16px}
+  .send{width:44px;height:44px}
+  .modal .card{padding:24px}
+  .modal h2{font-size:28px}
+}
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{animation-duration:.001ms !important;animation-iteration-count:1 !important;transition:none !important}
+}
+</style>
+</head>
+<body>
+
+<!-- Atmospheric background -->
+<div class="stage" aria-hidden="true">
+  <div class="orb a"></div>
+  <div class="orb b"></div>
+  <div class="orb c"></div>
+  <div class="dust" id="dust"></div>
+</div>
+<div class="grain" aria-hidden="true"></div>
+
+<!-- ===== App shell ===== -->
+<main class="app" role="application" aria-label="A-chat">
+
+  <!-- Top bar -->
+  <header class="topbar glass" data-tilt>
+    <div class="brand">
+      <div class="mark" aria-hidden="true"></div>
+      <div>
+        <h1>A-chat</h1>
+        <span class="sub">a quiet room for friends</span>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:14px">
+      <div class="live" aria-live="polite"><span class="dot"></span><span id="liveLabel">demo mode</span></div>
+      <button class="who" id="whoBtn" type="button" aria-label="Change your name">
+        <span class="avatar" id="avatar">·</span>
+        <span class="name" id="whoName">guest</span>
+        <span class="edit">edit</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Chat stage -->
+  <section class="chat-wrap glass" data-tilt aria-label="Conversation">
+    <div class="chat scroll" id="chat" role="log" aria-live="polite" aria-relevant="additions">
+      <!-- messages injected here -->
+    </div>
+  </section>
+
+  <!-- Composer -->
+  <form class="composer glass" id="composer" data-tilt autocomplete="off">
+    <label class="field" for="input">
+      <span class="ph" id="ph">Say something kind<span class="caret"></span></span>
+      <textarea id="input" rows="1" aria-label="Message" spellcheck="true"></textarea>
+    </label>
+    <button class="send" id="send" type="submit" aria-label="Send message">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M4 12h15"/><path d="M13 5l7 7-7 7"/>
+      </svg>
+    </button>
+  </form>
+</main>
+
+<!-- ===== Name modal ===== -->
+<div class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+  <div class="glass card" data-tilt>
+    <h2 id="modalTitle">What's your name?</h2>
+    <p>Pick anything — your friends will see it on every message.</p>
+    <form class="input" id="nameForm">
+      <input id="nameInput" type="text" maxlength="24" placeholder="e.g. Aria" autocomplete="off" required />
+      <button class="go" type="submit">Enter</button>
+    </form>
+    <div class="hint">Stored only on this device · localStorage</div>
+  </div>
+</div>
+
+<script>
+/* =====================================================================
+   ★ A-CHAT  ·  JAVASCRIPT
+   =====================================================================
+   Sections (in order):
+     1. CONFIGURATION
+     2. STATE
+     3. DOM REFERENCES
+     4. UTILITIES
+     5. PARTICLE / TILT / GLASS ANIMATIONS
+     6. USERNAME MANAGEMENT
+     7. CHAT RENDERING
+     8. FIREBASE HOOKS  ← paste your config here
+     9. EVENT LISTENERS
+    10. BOOT
+   ===================================================================== */
+
+
+/* ---------------------------------------------------------------------
+   1. CONFIGURATION
+   ---------------------------------------------------------------------
+   ▸ Paste your Firebase config into the object below.
+   ▸ Leave it empty to run the in-memory demo (perfect for design review).
+   --------------------------------------------------------------------- */
+const firebaseConfig = {
+    apiKey: "AIzaSyA4Jm9a3Vr8d5bwz2G3Ru4ZJiZ4Oc783YQ",
+    authDomain: "a-chat-fbb2a.firebaseapp.com",
+    projectId: "a-chat-fbb2a",
+    storageBucket: "a-chat-fbb2a.firebasestorage.app",
+    messagingSenderId: "635087475472",
+    appId: "1:635087475472:web:522929dc7e4dea0b7c0b95"
+  };
+
+/* Where things live in your Realtime Database */
+const DB_PATHS = {
+  messages: "messages"   // each push: { user, text, ts }
+};
+
+/* localStorage keys */
+const LS = {
+  name: "achat:name:v1"
+};
+
+
+/* ---------------------------------------------------------------------
+   2. STATE
+   --------------------------------------------------------------------- */
+const state = {
+  user:   "",
+  mode:   "demo",          // "demo" | "live"
+  db:     null,            // firebase database ref (when live)
+  lastDay:null,            // last day separator rendered
+  seen:   new Set(),       // message ids we've already rendered
+};
+
+
+/* ---------------------------------------------------------------------
+   3. DOM REFERENCES
+   --------------------------------------------------------------------- */
+const $ = (sel,root=document) => root.querySelector(sel);
+const chatEl     = $("#chat");
+const inputEl    = $("#input");
+const phEl       = $("#ph");
+const sendBtn    = $("#send");
+const composer   = $("#composer");
+const modal      = $("#modal");
+const nameForm   = $("#nameForm");
+const nameInput  = $("#nameInput");
+const whoBtn     = $("#whoBtn");
+const whoName    = $("#whoName");
+const avatarEl   = $("#avatar");
+const liveLabel  = $("#liveLabel");
+const dustEl     = $("#dust");
+
+
+/* ---------------------------------------------------------------------
+   4. UTILITIES
+   --------------------------------------------------------------------- */
+const fmtTime = ts => new Date(ts).toLocaleTimeString([], {hour:"numeric",minute:"2-digit"});
+const fmtDay  = ts => {
+  const d = new Date(ts), today = new Date();
+  const isSameDay = (a,b)=>a.toDateString()===b.toDateString();
+  const y = new Date(today); y.setDate(today.getDate()-1);
+  if (isSameDay(d,today)) return "Today";
+  if (isSameDay(d,y))     return "Yesterday";
+  return d.toLocaleDateString([], {weekday:"long", month:"short", day:"numeric"});
+};
+const initials = name => {
+  const parts = (name||"·").trim().split(/\s+/).slice(0,2);
+  return parts.map(p=>p[0]?.toUpperCase()||"").join("") || "·";
+};
+const hashHue = s => { let h=0; for (const c of s) h = (h*31 + c.charCodeAt(0)) >>> 0; return h % 360; };
+const escapeHtml = s => s.replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+
+/* ---------------------------------------------------------------------
+   5. PARTICLES + GLASS HIGHLIGHT TRACKING
+   ---------------------------------------------------------------------
+   ▸ Floating dust particles (purely decorative).
+   ▸ Mouse-tracked specular highlight on every [data-tilt] glass surface
+     via CSS variables --mx / --my, batched with requestAnimationFrame.
+   --------------------------------------------------------------------- */
+(function spawnDust(){
+  const N = window.matchMedia("(max-width: 640px)").matches ? 14 : 28;
+  const frag = document.createDocumentFragment();
+  for (let i=0;i<N;i++){
+    const i_ = document.createElement("i");
+    const dur  = 18 + Math.random()*22;
+    const delay= -Math.random()*dur;
+    const size = 1 + Math.random()*2.5;
+    i_.style.left = (Math.random()*100)+"%";
+    i_.style.width = i_.style.height = size+"px";
+    i_.style.animationDuration = dur+"s";
+    i_.style.animationDelay = delay+"s";
+    i_.style.opacity = (.25 + Math.random()*.5).toFixed(2);
+    frag.appendChild(i_);
+  }
+  dustEl.appendChild(frag);
+})();
+
+(function glassParallax(){
+  const targets = [];
+  let pending = false, lastX = 0, lastY = 0;
+  document.querySelectorAll("[data-tilt], .msg").forEach(el => targets.push(el));
+  // Observer for newly added .msg elements
+  new MutationObserver(muts => {
+    muts.forEach(m => m.addedNodes.forEach(n => {
+      if (n.nodeType===1 && n.classList?.contains("msg")) targets.push(n);
+    }));
+  }).observe(chatEl, {childList:true});
+
+  function apply(){
+    pending = false;
+    for (const el of targets){
+      const r = el.getBoundingClientRect();
+      if (r.bottom < -50 || r.top > innerHeight + 50) continue;
+      const mx = ((lastX - r.left) / r.width)  * 100;
+      const my = ((lastY - r.top)  / r.height) * 100;
+      el.style.setProperty("--mx", mx.toFixed(1)+"%");
+      el.style.setProperty("--my", my.toFixed(1)+"%");
+    }
+  }
+  window.addEventListener("pointermove", e => {
+    lastX = e.clientX; lastY = e.clientY;
+    if (!pending){ pending = true; requestAnimationFrame(apply); }
+  }, {passive:true});
+})();
+
+
+/* ---------------------------------------------------------------------
+   6. USERNAME MANAGEMENT
+   ---------------------------------------------------------------------
+   ▸ On boot we read localStorage[LS.name].
+   ▸ If empty → show the floating glass name modal.
+   ▸ "edit" button in the top bar re-opens the modal anytime.
+   --------------------------------------------------------------------- */
+function loadName(){
+  try { return (localStorage.getItem(LS.name) || "").trim(); }
+  catch { return ""; }
+}
+function saveName(n){
+  try { localStorage.setItem(LS.name, n); } catch {}
+}
+function applyName(n){
+  state.user = n;
+  whoName.textContent = n || "guest";
+  avatarEl.textContent = initials(n);
+  const hue = hashHue(n || "·");
+  avatarEl.style.background = `linear-gradient(135deg, hsl(${hue} 90% 72%), hsl(${(hue+60)%360} 90% 75%))`;
+}
+function openNameModal(prefill = ""){
+  nameInput.value = prefill || state.user || "";
+  modal.classList.add("show");
+  setTimeout(()=>nameInput.focus(), 60);
+}
+function closeNameModal(){ modal.classList.remove("show"); inputEl.focus(); }
+
+
+/* ---------------------------------------------------------------------
+   7. CHAT RENDERING
+   ---------------------------------------------------------------------
+   renderMessage({ id, user, text, ts })
+     ▸ Inserts a day separator when the day changes.
+     ▸ Builds a glass message card and animates it in.
+     ▸ Auto-scrolls if the user is near the bottom (smart scroll).
+   --------------------------------------------------------------------- */
+function nearBottom(){
+  const slack = 120;
+  return chatEl.scrollHeight - chatEl.scrollTop - chatEl.clientHeight < slack;
+}
+function clearEmpty(){
+  const e = chatEl.querySelector(".chat-empty");
+  if (e) e.remove();
+}
+function renderEmpty(){
+  if (chatEl.querySelector(".chat-empty")) return;
+  const w = document.createElement("div");
+  w.className = "chat-empty";
+  w.innerHTML = `
+    <h2>It's quiet in here.</h2>
+    <p>Say hello and watch the room come alive. Messages float in like glass — gently, one by one.</p>`;
+  chatEl.appendChild(w);
+}
+function maybeDay(ts){
+  const label = fmtDay(ts);
+  if (label === state.lastDay) return;
+  state.lastDay = label;
+  const d = document.createElement("div");
+  d.className = "day";
+  d.textContent = label;
+  chatEl.appendChild(d);
+}
+function renderMessage(msg){
+  if (msg.id && state.seen.has(msg.id)) return;
+  if (msg.id) state.seen.add(msg.id);
+  clearEmpty();
+
+  const stick = nearBottom();
+  maybeDay(msg.ts);
+
+  const el = document.createElement("article");
+  el.className = "msg" + (msg.user === state.user ? " mine" : "");
+  el.innerHTML = `
+    <div class="meta">
+      <span class="u">${escapeHtml(msg.user || "anon")}</span>
+      <span class="t">${fmtTime(msg.ts)}</span>
+    </div>
+    <div class="body">${escapeHtml(msg.text)}</div>`;
+  chatEl.appendChild(el);
+
+  if (stick) requestAnimationFrame(()=>{
+    chatEl.scrollTo({top:chatEl.scrollHeight, behavior:"smooth"});
+  });
+}
+
+
+/* ---------------------------------------------------------------------
+   8. FIREBASE HOOKS  ★ YOU CONNECT HERE
+   ---------------------------------------------------------------------
+   How it works:
+     ▸ initBackend() inspects firebaseConfig. If it has an apiKey we go
+       LIVE; otherwise we stay in DEMO mode with a small seeded thread.
+     ▸ LIVE mode listens on `${DB_PATHS.messages}` with child_added,
+       so every new message arrives in real time across all clients.
+     ▸ sendToBackend({user, text, ts}) pushes a new node — Firebase
+       assigns the id; child_added fires and renderMessage paints it.
+
+   Database shape (Realtime Database):
+     /messages/<auto-id> = { user: string, text: string, ts: number }
+   --------------------------------------------------------------------- */
+function initBackend(){
+  const hasConfig = firebaseConfig && firebaseConfig.apiKey && typeof firebase !== "undefined";
+  if (!hasConfig){
+    state.mode = "demo";
+    liveLabel.textContent = "demo mode";
+    seedDemo();
+    return;
+  }
+  // ===== LIVE MODE =====
+  firebase.initializeApp(firebaseConfig);
+  state.db   = firebase.database().ref(DB_PATHS.messages);
+  state.mode = "live";
+  liveLabel.textContent = "live";
+
+  // Listen for every new message (initial load + future writes).
+  state.db.limitToLast(200).on("child_added", snap => {
+    const v = snap.val() || {};
+    renderMessage({
+      id:   snap.key,
+      user: v.user || "anon",
+      text: v.text || "",
+      ts:   v.ts   || Date.now()
+    });
+  });
+}
+function sendToBackend(payload){
+  if (state.mode === "live" && state.db){
+    // Use Firebase's server-side timestamp for perfect ordering.
+    state.db.push({
+      user: payload.user,
+      text: payload.text,
+      ts:   firebase.database.ServerValue.TIMESTAMP
+    });
+  } else {
+    // DEMO: just render locally.
+    renderMessage({ id: "local-"+Math.random().toString(36).slice(2), ...payload });
+  }
+}
+
+/* A tiny seeded conversation so demo mode never looks empty. */
+function seedDemo(){
+  const now = Date.now();
+  const seed = [
+    { user:"Aria",  text:"new room feels nice ✨",                 ts: now - 1000*60*42 },
+    { user:"Kai",   text:"the glass actually moves with the cursor — look",  ts: now - 1000*60*38 },
+    { user:"Aria",  text:"obsessed.\nit's so calm in here.",       ts: now - 1000*60*35 },
+    { user:"Mira",  text:"who picked the colors? chef's kiss 👌",  ts: now - 1000*60*18 },
+  ];
+  if (seed.length === 0) { renderEmpty(); return; }
+  seed.forEach((m,i) => setTimeout(()=>renderMessage({id:"seed-"+i, ...m}), 220 + i*180));
+}
+
+
+/* ---------------------------------------------------------------------
+   9. EVENT LISTENERS
+   --------------------------------------------------------------------- */
+
+// Composer placeholder toggle + textarea auto-grow
+function syncComposer(){
+  const has = inputEl.value.trim().length > 0;
+  composer.classList.toggle("has-text", has);
+  inputEl.style.height = "auto";
+  inputEl.style.height = Math.min(inputEl.scrollHeight, 140) + "px";
+}
+inputEl.addEventListener("input", syncComposer);
+
+// Send on submit
+composer.addEventListener("submit", e => {
+  e.preventDefault();
+  const text = inputEl.value.trim();
+  if (!text) return;
+  if (!state.user){ openNameModal(); return; }
+  sendToBackend({ user: state.user, text, ts: Date.now() });
+  inputEl.value = "";
+  syncComposer();
+  inputEl.focus();
+  // tiny tactile feedback
+  sendBtn.animate(
+    [{transform:"scale(.9)"},{transform:"scale(1)"}],
+    {duration:280, easing:"cubic-bezier(.2,.9,.2,1.15)"}
+  );
+});
+
+// Enter sends, Shift+Enter newline
+inputEl.addEventListener("keydown", e => {
+  if (e.key === "Enter" && !e.shiftKey){
+    e.preventDefault();
+    composer.requestSubmit();
+  }
+});
+
+// Name modal
+whoBtn.addEventListener("click", ()=>openNameModal(state.user));
+nameForm.addEventListener("submit", e => {
+  e.preventDefault();
+  const n = nameInput.value.trim().slice(0,24);
+  if (!n) return;
+  saveName(n);
+  applyName(n);
+  closeNameModal();
+});
+modal.addEventListener("click", e => {
+  // click on backdrop closes — only when a name already exists
+  if (e.target === modal && state.user) closeNameModal();
+});
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape" && modal.classList.contains("show") && state.user) closeNameModal();
+});
+
+
+/* ---------------------------------------------------------------------
+   10. BOOT
+   --------------------------------------------------------------------- */
+(function boot(){
+  const saved = loadName();
+  if (saved){ applyName(saved); }
+  else      { openNameModal(); }
+  initBackend();
+  syncComposer();
+})();
+</script>
+</body>
+</html>
