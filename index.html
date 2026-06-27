@@ -9,7 +9,6 @@
 <meta name="description" content="A·chat — a calm, glass-walled room for a conversation between friends.">
 <link rel="icon" href="data:,">
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 
 <!-- ============================================================
@@ -874,14 +873,21 @@
   // Where things are stored, and the few numbers that tune the feel
   // of the app. Tweak these freely — nothing else in the file needs
   // to change when you do.
-const firebaseConfig = {
-    apiKey: "AIzaSyA4Jm9a3Vr8d5bwz2G3Ru4ZJiZ4Oc783YQ",
-    authDomain: "a-chat-fbb2a.firebaseapp.com",
-    projectId: "a-chat-fbb2a",
-    storageBucket: "a-chat-fbb2a.firebasestorage.app",
-    messagingSenderId: "635087475472",
-    appId: "1:635087475472:web:522929dc7e4dea0b7c0b95"
-  };;
+  const CONFIG = {
+    // localStorage keys
+    storageKeyUsername: 'achat_username',
+    storageKeyDemoMessages: 'achat_demo_messages', // only used by the LOCAL DEMO backend, see section 10
+    // how many messages to keep around in the demo backend / on screen
+    maxHistory: 200,
+    // messages from the same person within this many minutes are
+    // visually "grouped" (avatar/name collapse) like a real chat app
+    groupWindowMinutes: 5,
+    // how close to the bottom (in px) counts as "already at the bottom",
+    // used to decide whether to auto-scroll on a new message
+    autoScrollThreshold: 120,
+    // minimum time the splash screen stays up, so it never flashes
+    splashMinMs: 850,
+  };
 
   // The example phrases the composer's placeholder slowly types and
   // erases when the input is empty and unfocused (section 12).
@@ -1332,6 +1338,14 @@ const firebaseConfig = {
   // stand-in so the app is fully usable right away: messages persist
   // in localStorage, and BroadcastChannel mirrors them live to any
   // other tab open on this same page — open two tabs to see it work.
+      const firebaseConfig = {
+    apiKey: "AIzaSyA4Jm9a3Vr8d5bwz2G3Ru4ZJiZ4Oc783YQ",
+    authDomain: "a-chat-fbb2a.firebaseapp.com",
+    projectId: "a-chat-fbb2a",
+    storageBucket: "a-chat-fbb2a.firebasestorage.app",
+    messagingSenderId: "635087475472",
+    appId: "1:635087475472:web:522929dc7e4dea0b7c0b95"
+  };
   const LocalDemoBackend = (function () {
     let channel = null;
 
@@ -1379,21 +1393,21 @@ const firebaseConfig = {
   // demo to real Firebase without touching anything else in the file.
   const ChatBackend = {
     init(onMessage) {
-      LocalDemoBackend.init(onMessage);
+      //LocalDemoBackend.init(onMessage);
       // ---- FIREBASE VERSION ----
       // Comment out the line above and uncomment this one. Note that
       // with real Firebase you should ALSO remove the immediate local
       // render in section 11 (handleSend), because 'child_added' fires
       // for your own pushes too — keeping both would show your own
       // message twice.
-      // db.ref('messages').limitToLast(CONFIG.maxHistory).on('child_added', (snapshot) => {
-      //   onMessage(snapshot.val());
-      // });
+      db.ref('messages').limitToLast(CONFIG.maxHistory).on('child_added', (snapshot) => {
+      onMessage(snapshot.val());
+     });
     },
     send(message) {
-      LocalDemoBackend.send(message);
+      //LocalDemoBackend.send(message);
       // ---- FIREBASE VERSION ----
-      // db.ref('messages').push(message);
+       db.ref('messages').push(message);
     },
   };
 
@@ -1413,7 +1427,7 @@ const firebaseConfig = {
     // Immediate local echo — the sender always sees their own message
     // appear instantly, with no round trip. (Read the Firebase note in
     // section 10 before relying on this once a real backend is wired up.)
-    renderMessage(message, { forceScroll: true });
+    //renderMessage(message, { forceScroll: true });
     ChatBackend.send(message);
 
     messageInputEl.value = '';
